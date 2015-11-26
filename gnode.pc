@@ -1,0 +1,5 @@
+Name: gnode
+Description: Golang Node JS
+Version: 0.0.1
+Cflags:  -Ic:\GoCode\src\github.com\kingland\gnode
+Libs:    -lv8 -lwinmm
