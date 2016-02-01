@@ -10,15 +10,15 @@ type embedable struct {
 	data interface{}
 }
 
-func (this *embedable) GetPrivateData() interface{} {
-	return this.data
+func (emdata_ *embedable) GetPrivateData() interface{} {
+	return emdata_.data
 }
 
-func (this *embedable) SetPrivateData(data interface{}) {
-	this.data = data
+func (emdata_ *embedable) SetPrivateData(data interface{}) {
+	emdata_.data = data
 }
 
-func GetVersion() string {
+func GetV8Version() string {
 	return C.GoString(C.V8_GetVersion())
 }
 
@@ -32,6 +32,7 @@ func SetFlagsFromString(cmd string) {
 // ArrayBuffer, ArrayBufferView, Int8Array...
 // If you want to use your own allocator. You can implement it in C++
 // and invoke v8::SetArrayBufferAllocator by your self
+//TODO:: Allocate array buffer
 /*func UseDefaultArrayBufferAllocator() {
 	C.V8_UseDefaultArrayBufferAllocator()
 }*/

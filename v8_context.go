@@ -37,11 +37,12 @@ type Context struct {
 }
 
 //var count_context_id int32 = 0
+//var aliveContext map[int]*Context = make(map[int]*Context)
 
 //create context
 func (engine_ *Engine) NewContext() *Context {
-  engine_.contextId++
-  id_ := engine_.contextId
+  contextId++
+  id_ := contextId
   self_ := C.V8_NewContext(C.int(id_), engine_.self)
 
   context_ :=  &Context{
@@ -61,6 +62,16 @@ func (engine_ *Engine) NewContext() *Context {
 	})
 
   return context_
+}
+
+//map context id
+func (engine_ *Engine) GetAliveContext(id int) *Context{
+  return engine_.aliveContext[id]
+}
+
+//map context id
+func (engine_ *Engine) SetAliveContext(id int, context *Context){
+  engine_.aliveContext[id] = context
 }
 
 func (context_ *Context) GetEngine() *Engine{

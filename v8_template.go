@@ -26,6 +26,7 @@ package gnode
 import "C"
 import "unsafe"
 import "sync"
+import "reflect"
 
 type ObjectTemplate struct {
 	sync.Mutex
@@ -33,83 +34,86 @@ type ObjectTemplate struct {
 	engine             *Engine
 	//accessors          map[string]*accessorInfo
 	//namedInfo          *namedPropertyInfo
-	//indexedInfo        *indexedPropertyInfo
+	indexedInfo        *indexedPropertyInfo
 	properties         map[string]*propertyInfo
 	self               unsafe.Pointer
 	internalFieldCount int
 }
 
 type PropertyCallbackInfo struct {
-	self        unsafe.Pointer
-	//typ         C.PropertyDataEnum
-	data        interface{}
-	returnValue ReturnValue
-	//context     *Context
+	self        			unsafe.Pointer
+	typ         			C.V8_PropertyDataEnum
+	data        			interface{}
+	returnValue 			ReturnValue
+	context     			*Context
 }
 
 type AccessorCallbackInfo struct {
-	self        unsafe.Pointer
-	data        interface{}
-	returnValue ReturnValue
-	context     *Context
-	//typ         C.AccessorDataEnum
+	self        			unsafe.Pointer
+	data        			interface{}
+	returnValue 			ReturnValue
+	context     			*Context
+	typ         			C.V8_AccessorDataEnum
 }
 
 type AccessCheckCallbackInfo struct{
-	self 	unsafe.Pointer
-	data  interface{}
-	context *Context
-	host unsafe.Pointer
-	key unsafe.Pointer
-	index uint32
+	self 							unsafe.Pointer
+	data  						interface{}
+	context 					*Context
+	host 							unsafe.Pointer
+	key 							unsafe.Pointer
+	index 						uint32
 	//typ 	C.AccessCheckDataEnum
 }
 
 type namedPropertyInfo struct {
-	getter     NamedPropertyGetterCallback
-	setter     NamedPropertySetterCallback
-	deleter    NamedPropertyDeleterCallback
-	query      NamedPropertyQueryCallback
-	enumerator NamedPropertyEnumeratorCallback
-	data       interface{}
+	getter     				NamedPropertyGetterCallback
+	setter     				NamedPropertySetterCallback
+	deleter    				NamedPropertyDeleterCallback
+	query      				NamedPropertyQueryCallback
+	enumerator 				NamedPropertyEnumeratorCallback
+	data       				interface{}
 }
 
 type indexedPropertyInfo struct {
-	getter     IndexedPropertyGetterCallback
-	setter     IndexedPropertySetterCallback
-	deleter    IndexedPropertyDeleterCallback
-	query      IndexedPropertyQueryCallback
-	enumerator IndexedPropertyEnumeratorCallback
-	data       interface{}
+	getter     				IndexedPropertyGetterCallback
+	setter     				IndexedPropertySetterCallback
+	deleter    				IndexedPropertyDeleterCallback
+	query      				IndexedPropertyQueryCallback
+	enumerator 				IndexedPropertyEnumeratorCallback
+	data       				interface{}
 }
 
 
 type accessorInfo struct {
-	key     string
-	getter  AccessorGetterCallback
-	setter  AccessorSetterCallback
-	data    interface{}
-	attribs PropertyAttribute
+	key     					string
+	getter  					AccessorGetterCallback
+	setter  					AccessorSetterCallback
+	data    					interface{}
+	attribs 					PropertyAttribute
 }
 
 type propertyInfo struct {
-	key     string
-	value   *Value
-	attribs PropertyAttribute
+	key     					string
+	value   					*Value
+	attribs 					PropertyAttribute
 }
 
+//Name Property Callback
 type NamedPropertyGetterCallback func(string, PropertyCallbackInfo)
 type NamedPropertySetterCallback func(string, *Value, PropertyCallbackInfo)
 type NamedPropertyDeleterCallback func(string, PropertyCallbackInfo)
 type NamedPropertyQueryCallback func(string, PropertyCallbackInfo)
 type NamedPropertyEnumeratorCallback func(PropertyCallbackInfo)
 
+//Index Property Callback
 type IndexedPropertyGetterCallback func(uint32, PropertyCallbackInfo)
 type IndexedPropertySetterCallback func(uint32, *Value, PropertyCallbackInfo)
 type IndexedPropertyDeleterCallback func(uint32, PropertyCallbackInfo)
 type IndexedPropertyQueryCallback func(uint32, PropertyCallbackInfo)
 type IndexedPropertyEnumeratorCallback func(PropertyCallbackInfo)
 
+//Accessor Callback
 type AccessorGetterCallback func(name string, info AccessorCallbackInfo)
 type AccessorSetterCallback func(name string, value *Value, info AccessorCallbackInfo)
 
@@ -222,4 +226,87 @@ func (otmp_ *ObjectTemplate) SetInternalFieldCount(count int) {
 
 func (otmp_ *ObjectTemplate) InternalFieldCount() int {
 	return otmp_.internalFieldCount
+}
+
+
+//export go_named_property_callback
+func go_named_property_callback(typ C.V8_PropertyDataEnum, info *C.V8_PropertyCallbackInfo, engine unsafe.Pointer) {
+	gname := ""
+	if info.key != nil {
+		gname = C.GoString(info.key)
+	}
+	gengine := (*Engine)(engine)
+	//gcontext := (*Context)(context)
+	gcontext := gengine.GetAliveContext(int(info.contextId));
+	switch typ {
+	case C.OTP_Getter:
+		(*(*NamedPropertyGetterCallback)(info.callback))(
+			gname, PropertyCallbackInfo{unsafe.Pointer(info), typ, *(*interface{})(info.data), ReturnValue{}, gcontext})
+	case C.OTP_Setter:
+		(*(*NamedPropertySetterCallback)(info.callback))(
+			gname,
+			NewValue(gengine, info.setValue),
+			PropertyCallbackInfo{unsafe.Pointer(info), typ, *(*interface{})(info.data), ReturnValue{}, gcontext})
+	case C.OTP_Deleter:
+		(*(*NamedPropertyDeleterCallback)(info.callback))(
+			gname, PropertyCallbackInfo{unsafe.Pointer(info), typ, *(*interface{})(info.data), ReturnValue{}, gcontext})
+	case C.OTP_Query:
+		(*(*NamedPropertyQueryCallback)(info.callback))(
+			gname, PropertyCallbackInfo{unsafe.Pointer(info), typ, *(*interface{})(info.data), ReturnValue{}, gcontext})
+	case C.OTP_Enumerator:
+		(*(*NamedPropertyEnumeratorCallback)(info.callback))(
+			PropertyCallbackInfo{unsafe.Pointer(info), typ, *(*interface{})(info.data), ReturnValue{}, gcontext})
+	}
+}
+
+
+//export go_indexed_property_callback
+func go_indexed_property_callback(typ C.V8_PropertyDataEnum, info *C.V8_PropertyCallbackInfo, engine unsafe.Pointer) {
+	gengine := (*Engine)(engine)
+	//gcontext := (*Context)(context)
+	gcontext := gengine.GetAliveContext(int(info.contextId))
+	switch typ {
+	case C.OTP_Getter:
+		(*(*IndexedPropertyGetterCallback)(info.callback))(
+			uint32(info.index), PropertyCallbackInfo{unsafe.Pointer(info), typ, *(*interface{})(info.data), ReturnValue{}, gcontext})
+	case C.OTP_Setter:
+		(*(*IndexedPropertySetterCallback)(info.callback))(
+			uint32(info.index),
+			NewValue(gcontext.engine, info.setValue),
+			PropertyCallbackInfo{unsafe.Pointer(info), typ, *(*interface{})(info.data), ReturnValue{}, gcontext})
+	case C.OTP_Deleter:
+		(*(*IndexedPropertyDeleterCallback)(info.callback))(
+			uint32(info.index), PropertyCallbackInfo{unsafe.Pointer(info), typ, *(*interface{})(info.data), ReturnValue{}, gcontext})
+	case C.OTP_Query:
+		(*(*IndexedPropertyQueryCallback)(info.callback))(
+			uint32(info.index), PropertyCallbackInfo{unsafe.Pointer(info), typ, *(*interface{})(info.data), ReturnValue{}, gcontext})
+	case C.OTP_Enumerator:
+		(*(*IndexedPropertyEnumeratorCallback)(info.callback))(
+			PropertyCallbackInfo{unsafe.Pointer(info), typ, *(*interface{})(info.data), ReturnValue{}, gcontext})
+	}
+}
+
+//export go_accessor_callback
+func go_accessor_callback(typ C.V8_AccessorDataEnum, info *C.V8_AccessorCallbackInfo, engine unsafe.Pointer) {
+	gengine := (*Engine)(engine)
+	name := reflect.StringHeader{
+		Data: uintptr(unsafe.Pointer(info.key)),
+		Len:  int(info.key_length),
+	}
+	gname := *(*string)(unsafe.Pointer(&name))
+	//gcontext := (*Context)(context)
+	gcontext := gengine.GetAliveContext(int(info.contextId))
+	switch typ {
+	case C.OTA_Getter:
+		(*(*AccessorGetterCallback)(info.callback))(
+			gname,
+			AccessorCallbackInfo{unsafe.Pointer(info), *(*interface{})(info.data), ReturnValue{}, gcontext, typ})
+	case C.OTA_Setter:
+		(*(*AccessorSetterCallback)(info.callback))(
+			gname,
+			NewValue(gcontext.engine, info.setValue),
+			AccessorCallbackInfo{unsafe.Pointer(info), *(*interface{})(info.data), ReturnValue{}, gcontext, typ})
+	default:
+		panic("impossible type")
+	}
 }

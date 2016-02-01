@@ -30,12 +30,13 @@ import "runtime"
 import "time"
 
 type Value struct{
-  engine       *Engine
-  self         unsafe.Pointer
+  engine        *Engine
+  self          unsafe.Pointer
   //self         C.jsvalue
-  disposed     bool
-  isType       int
-  notType      int
+  disposed      bool
+  isType        int
+  notType       int
+  id            int32
   //fieldOwnerId int64
 }
 
@@ -47,11 +48,11 @@ type Object struct {
 
 type External struct {
 	*Value
-	data interface{}
+	data           interface{}
 }
 
 type Array struct {
-	*Value
+	*Object
 }
 
 type RegExpFlags int
@@ -74,49 +75,63 @@ const (
 )
 
 const (
-	isUndefined     = 1 << iota
-	isNull          = 1 << iota
-	isTrue          = 1 << iota
-	isFalse         = 1 << iota
-	isString        = 1 << iota
-	isFunction      = 1 << iota
-	isArray         = 1 << iota
-	isObject        = 1 << iota
-	isBoolean       = 1 << iota
-	isNumber        = 1 << iota
-	isExternal      = 1 << iota
-	isInt32         = 1 << iota
-	isUint32        = 1 << iota
-	isDate          = 1 << iota
-	isBooleanObject = 1 << iota
-	isNumberObject  = 1 << iota
-	isStringObject  = 1 << iota
-	isNativeError   = 1 << iota
-	isRegExp        = 1 << iota
+	isUndefined              = 1 << iota
+	isNull                   = 1 << iota
+	isTrue                   = 1 << iota
+	isFalse                  = 1 << iota
+	isString                 = 1 << iota
+	isFunction               = 1 << iota
+	isArray                  = 1 << iota
+	isObject                 = 1 << iota
+	isBoolean                = 1 << iota
+	isNumber                 = 1 << iota
+	isExternal               = 1 << iota
+	isInt32                  = 1 << iota
+	isUint32                 = 1 << iota
+	isDate                   = 1 << iota
+	isBooleanObject          = 1 << iota
+	isNumberObject           = 1 << iota
+	isStringObject           = 1 << iota
+	isNativeError            = 1 << iota
+	isRegExp                 = 1 << iota
 )
+
+//var aliveValue map[int]*Value = make(map[int]*Value)
 
 func NewValue(engine_ *Engine, self_ unsafe.Pointer) *Value{
   if self_ == nil {
     return nil
   }
-  res_ := &Value{
+  valueId++
+  id_ := valueId
+  val_ := &Value{
     engine : engine_,
     self : self_,
     disposed : false,
+    id : id_,
   }
 
-  runtime.SetFinalizer(res_, func(v *Value) {
+  engine_.SetAliveValue(id_, val_)
+  runtime.SetFinalizer(val_, func(v *Value) {
     if traceDispose {
-      //println("v8.Value.Dispose()", v.self)
       println("v8.Value.Dispose()")
     }
     if !v.disposed {
-      //TODO:
       //C.V8_DisposeValue(v.self)
+      C.V8_Engine_DisposeValue(v.self)
     }
   })
 
-  return res_
+  return val_
+}
+
+func (engine_ *Engine) GetAliveValue(id int32) *Value{
+	return engine_.aliveValue[id]
+}
+
+func (engine_ *Engine) SetAliveValue(id int32, val *Value){
+	engine_.aliveValue[id] = val
+  C.V8_Value_SetManageId(val.self, C.int(id))
 }
 
 //Undefined Value
@@ -190,27 +205,26 @@ func (engine_ *Engine) NewExternal(value interface{}) *External {
 
   //TODO::
 	//external.setOwner(external)
-
 	return external_
 }
 
-func (engine_ *Engine) NewObject() *Object {
+func (engine_ *Engine) NewObject() *Value {
 	value_ := NewValue(engine_, C.V8_NewObject(engine_.self))
-  object_ := &Object{}
-  object_.Value = value_
-  return object_
+  /*object_ := &Object{}
+  object_.Value = value_*/
+  return value_
 }
 
-func (engine_ *Engine) NewArray(length int) *Array {
+func (engine_ *Engine) NewArray(length int) *Value {
 	value_ := NewValue(engine_, C.V8_NewArray(
 		engine_.self, C.int(length),
 	))
-  array_ := &Array{
+  /*array_ := &Array{
     //length : length,
   }
-  array_.Value = value_
+  array_.Value = value_*/
 
-  return array_
+  return value_
 }
 
 func (engine_ *Engine) NewRegExp(pattern string, flags RegExpFlags) *Value {
@@ -236,6 +250,25 @@ func (val_ *Value) hasJsType(typeCode int ,check func(unsafe.Pointer) bool) bool
 		val_.notType |= typeCode
 		return false
 	}
+}
+
+func (val_ *Value) GetEngine() *Engine{
+  return val_.engine
+}
+
+func (val_ *Value) IsDisposed() bool{
+  return val_.disposed
+}
+
+func (val_ *Value) Disposed()  {
+  if val_.disposed {
+    return
+  }
+  engine_ := val_.GetEngine()
+  id_ := val_.id
+  val_.disposed = true
+  delete(engine_.aliveValue, id_)
+  C.V8_Engine_DisposeValue(val_.self)
 }
 
 //Value
@@ -398,7 +431,7 @@ func (val_ *Value) ToArray() *Array {
 	if val_ == nil {
 		return nil
 	}
-	return &Array{val_}
+	return &Array{&Object{val_, nil}}
 }
 
 func (val_ *Value) ToRegExp() *RegExp {
@@ -408,15 +441,12 @@ func (val_ *Value) ToRegExp() *RegExp {
 	return &RegExp{val_, "", false, RF_None, false}
 }
 
-/*
-TODO::
-func (v *Value) ToFunction() *Function {
-	if v == nil {
+func (val_ *Value) ToFunction() *Function {
+	if val_ == nil {
 		return nil
 	}
-	return &Function{&Object{v, nil, nil}, nil, nil}
+	return &Function{val_, nil, nil}
 }
-*/
 
 func (val_ *Value) ToExternal() *External {
 	if val_ == nil {
@@ -479,14 +509,14 @@ func (object_ *Object) GetElement(index int) *Value {
 	return NewValue(object_.engine, C.V8_Object_GetElement(object_.self, C.uint32_t(index)))
 }
 
-/*
-func (o *Object) GetPropertyAttributes(key string) PropertyAttribute {
-	keyPtr := unsafe.Pointer((*reflect.StringHeader)(unsafe.Pointer(&key)).Data)
+
+func (object_ *Object) GetPropertyAttributes(key string) PropertyAttribute {
+	//keyPtr := unsafe.Pointer((*reflect.StringHeader)(unsafe.Pointer(&key)).Data)
+  keyPtr := StringToPointer(key)
 	return PropertyAttribute(C.V8_Object_GetPropertyAttributes(
-		o.self, (*C.char)(keyPtr), C.int(len(key)),
+		object_.self, (*C.char)(keyPtr), C.int(len(key)),
 	))
 }
-*/
 
 func (object_ *Object) InternalFieldCount() int {
 	return int(C.V8_Object_InternalFieldCount(object_.self))
@@ -610,45 +640,35 @@ func (object_ *Object) DeleteElement(index int) bool {
 	) == 1
 }
 
-/*
-TODO: ToArray
 // Returns an array containing the names of the enumerable properties
 // of this object, including properties from prototype objects.  The
 // array returned by this method contains the same values as would
 // be enumerated by a for-in statement over this object.
 //
 func (object_ *Object) GetPropertyNames() *Array {
-	return newValue(object_.engine, C.V8_Object_GetPropertyNames(object_.self)).ToArray()
+	return NewValue(object_.engine, C.V8_Object_GetPropertyNames(object_.self)).ToArray()
 }
-*/
 
-/*
-TODO:: ToArray
 // This function has the same functionality as GetPropertyNames but
 // the returned array doesn't contain the names of properties from
 // prototype objects.
 //
-func (o *Object) GetOwnPropertyNames() *Array {
-	return newValue(o.engine, C.V8_Object_GetOwnPropertyNames(o.self)).ToArray()
+func (object_ *Object) GetOwnPropertyNames() *Array {
+	return NewValue(object_.engine, C.V8_Object_GetOwnPropertyNames(object_.self)).ToArray()
 }
-*/
 
-
-/*
-TODO:: ToObject
 // Get the prototype object.  This does not skip objects marked to
 // be skipped by __proto__ and it does not consult the security
 // handler.
 //
-func (o *Object) GetPrototype() *Object {
-	return newValue(o.engine, C.V8_Object_GetPrototype(o.self)).ToObject()
+func (object_ *Object) GetPrototype() *Object {
+	return NewValue(object_.engine, C.V8_Object_GetPrototype(object_.self)).ToObject()
 }
-*/
+
 
 // Set the prototype object.  This does not skip objects marked to
 // be skipped by __proto__ and it does not consult the security
 // handler.
-//
 func (object_ *Object) SetPrototype(proto *Object) bool {
 	return C.V8_Object_SetPrototype(object_.self, proto.self) == 1
 }
@@ -672,23 +692,22 @@ func (object_ *Object) DeleteHiddenValue(key string) bool{
 	return C.V8_Object_DeleteHiddenValue(object_.self, (*C.char)(keyPtr), C.int(len(key))) == 1
 }
 
-/*
-TODO:: ToString
 func (object_ *Object) GetConstructorName() string{
-	return NewValue(object_.engine, C.V8_Object_GetConstructorName(o.self)).ToString()
-}
-*/
-
-/*
-//TODO:
-func (o *Object) SetAlignedPointerInInternalField(index int, val_ptr unsafe.Pointer) {
-	C.V8_Object_SetAlignedPointerInInternalField(o.self, C.int(index), val_ptr)
+	return NewValue(object_.engine, C.V8_Object_GetConstructorName(object_.self)).ToString()
 }
 
+
+//Sets a 2-byte-aligned native pointer in an internal field. To retrieve such a field,
+//GetAlignedPointerFromInternalField must be used, everything else leads to undefined behavior.
+func (o *Object) SetAlignedPointerInInternalField(index int, ptr unsafe.Pointer) {
+	C.V8_Object_SetAlignedPointerInInternalField(o.self, C.int(index), ptr)
+}
+
+//Gets a 2-byte-aligned native pointer from an internal field.
+//This field must have been set by SetAlignedPointerInInternalField, everything else leads to undefined behavior.
 func (o *Object) GetAlignedPointerFromInternalField(index int) unsafe.Pointer{
 	return C.V8_Object_GetAlignedPointerFromInternalField(o.self, C.int(index))
 }
-*/
 
 func (object_ *Object) GetRealNamedProperty(key string) *Value {
 	//keyPtr := unsafe.Pointer((*reflect.StringHeader)(unsafe.Pointer(&key)).Data)
@@ -707,9 +726,9 @@ func (array_ *Array) Length() int {
 	return int(C.V8_Array_Length(array_.self))
 }
 
-//Reg
-// Returns the value of the source property: a string representing
-// the regular expression.
+//Reg Exp
+//Returns the value of the source property: a string representing
+//the regular expression.
 func (reg_ *RegExp) Pattern() string {
 	if !reg_.patternCached {
 		cstring := C.V8_RegExp_Pattern(reg_.self)
@@ -721,7 +740,6 @@ func (reg_ *RegExp) Pattern() string {
 }
 
 // Returns the flags bit field.
-//
 func (reg_ *RegExp) Flags() RegExpFlags {
 	if !reg_.flagsCached {
 		reg_.flags = RegExpFlags(C.V8_RegExp_Flags(reg_.self))

@@ -32,9 +32,22 @@ import "runtime"
 // A compiled JavaScript script.
 type Script struct {
 	self unsafe.Pointer
+	id int
 }
 
-var aliveScript map[int]*Script = make(map[int]*Script)
+type UnboundScript struct {
+	self unsafe.Pointer
+	id int
+}
+
+type ScriptOrigin struct {
+	Name         string
+	LineOffset   int
+	ColumnOffset int
+}
+
+//var aliveScript map[int]*Script = make(map[int]*Script)
+//var aliveUnboundScript map[int] *UnboundScript = make(map[int] *UnboundScript)
 /*
 func NewScript(ptr unsafe.Pointer) *Script{
   script_ := &Script{
@@ -54,18 +67,20 @@ func NewScript(ptr unsafe.Pointer) *Script{
 */
 
 func (engine_ *Engine) Compile(code []byte, origin *ScriptOrigin)  *Script {
-	codePtr := ByteToPointer(code)
-	self := C.V8_NewScript(engine_.self, (*C.char)(codePtr), unsafe.Pointer(origin))
-
-	if self == nil {
+	codePtr_ := ByteToPointer(code)
+	self_ := C.V8_NewScript(engine_.self, (*C.char)(codePtr_), unsafe.Pointer(origin))
+	if self_ == nil {
 		return nil
 	}
+	scriptId++
+	id_ := scriptId
 
-	script := &Script{
-		self: self,
+	script_ := &Script{
+		self: self_,
+		id : id_,
 	}
-
-	runtime.SetFinalizer(script, func(s *Script) {
+	engine_.SetAliveScript(id_, script_)
+	runtime.SetFinalizer(script_, func(s *Script) {
 		if traceDispose {
 			println("v8.Script.Dispose()", s.self)
 		}
@@ -73,34 +88,27 @@ func (engine_ *Engine) Compile(code []byte, origin *ScriptOrigin)  *Script {
 		C.V8_Script_Dispose(s.self)
 	})
 
-	return script
-}
-
-func (engine_ *Engine) GetAliveScript(id int) *Script{
-	return aliveScript[id]
-}
-
-func (engine_ *Engine) SetAliveScript(id int, script *Script){
-	aliveScript[id] = script
-}
-
-type UnboundScript struct {
-	self unsafe.Pointer
+	return script_
 }
 
 func (engine_ *Engine) CompileUnbound(code []byte, origin *ScriptOrigin)  *UnboundScript {
-	codePtr := ByteToPointer(code)
-	self := C.V8_NewUnboundScript(engine_.self, (*C.char)(codePtr), unsafe.Pointer(origin))
+	codePtr_ := ByteToPointer(code)
+	self_ := C.V8_NewUnboundScript(engine_.self, (*C.char)(codePtr_), unsafe.Pointer(origin))
 
-	if self == nil {
+	if self_ == nil {
 		return nil
 	}
 
-	script := &UnboundScript{
-		self: self,
-	}
+	unboundScriptId++
+	id_ := unboundScriptId
 
-	runtime.SetFinalizer(script, func(s *Script) {
+	script_ := &UnboundScript{
+		self: self_,
+		id : id_,
+	}
+	engine_.SetAliveUnboundScript(id_, script_)
+
+	runtime.SetFinalizer(script_, func(s *Script) {
 		if traceDispose {
 			println("v8.Script.Dispose()", s.self)
 		}
@@ -108,16 +116,26 @@ func (engine_ *Engine) CompileUnbound(code []byte, origin *ScriptOrigin)  *Unbou
 		C.V8_UnboundScript_Dispose(s.self)
 	})
 
-	return script
+	return script_
 }
 
-type ScriptOrigin struct {
-	Name         string
-	LineOffset   int
-	ColumnOffset int
+func (engine_ *Engine) GetAliveScript(id int) *Script{
+	return engine_.aliveScript[id]
 }
 
-func NewScriptOrigin(name string, lineOffset, columnOffset int) *ScriptOrigin {
+func (engine_ *Engine) SetAliveScript(id int, script *Script){
+	engine_.aliveScript[id] = script
+}
+
+func (engine_ *Engine) GetAliveUnboundScript(id int) *UnboundScript{
+	return engine_.aliveUnboundScript[id]
+}
+
+func (engine_ *Engine) SetAliveUnboundScript(id int, script *UnboundScript){
+	engine_.aliveUnboundScript[id] = script
+}
+
+func (engine_ *Engine) NewScriptOrigin(name string, lineOffset, columnOffset int) *ScriptOrigin {
 	return &ScriptOrigin{
 		Name:         name,
 		LineOffset:   lineOffset,

@@ -29,8 +29,8 @@ import "unsafe"
 
 type Function struct {
 	*Value
-	callback FunctionCallback
-	data     interface{}
+	callback 					FunctionCallback
+	data     					interface{}
 }
 
 type FunctionCallback func(FunctionCallbackInfo)
@@ -38,16 +38,16 @@ type FunctionCallback func(FunctionCallbackInfo)
 // Function and property return value
 //
 type ReturnValue struct {
-	self unsafe.Pointer
+	self 							unsafe.Pointer
 }
 
 // Function callback info
 //
 type FunctionCallbackInfo struct {
-	self        unsafe.Pointer
-	returnValue ReturnValue
-	context     *Context
-	data        interface{}
+	self        			unsafe.Pointer
+	returnValue 			ReturnValue
+	context     			*Context
+	data        			interface{}
 }
 
 

@@ -38,7 +38,7 @@
 // by simply blitting its value (being only 16 bytes should be quite fast too).
 
 #define JSVALUE_TYPE_UNKNOWN_ERROR  -1
-#define JSVALUE_TYPE_EMPTY			 0
+#define JSVALUE_TYPE_EMPTY			 		 0
 #define JSVALUE_TYPE_NULL            1
 #define JSVALUE_TYPE_BOOLEAN         2
 #define JSVALUE_TYPE_INTEGER         3
@@ -54,7 +54,7 @@
 #define JSVALUE_TYPE_DICT           15
 #define JSVALUE_TYPE_ERROR          16
 #define JSVALUE_TYPE_FUNCTION       17
-#define JSVALUE_TYPE_PERSISTENT		 18
+//#define JSVALUE_TYPE_PERSISTENT		 18
 
 #define IDLE_TIME_IN_MS 1000
 
@@ -93,9 +93,66 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+	typedef enum {
+		OTP_Context = 0,
+		OTP_Getter,
+		OTP_Setter,
+		OTP_Query,
+		OTP_Deleter,
+		OTP_Enumerator,
+		OTP_Data,
+		OTP_Num
+	} V8_PropertyDataEnum;
 
-    typedef struct jsvalue
-    {
+	typedef enum {
+    OTA_Context = 0,
+    OTA_Getter,
+    OTA_Setter,
+    OTA_KeyString,
+    OTA_KeyLength,
+    OTA_Data,
+    OTA_Num
+	} V8_AccessorDataEnum;
+
+	typedef struct {
+	  void*     engine;
+	  void*     info;
+	  void*     callback;
+	  void*     setValue;
+	  void*     data;
+	  char*	  	key;
+		uint32_t  index;
+	  void*     returnValue;
+		int32_t 	contextId;
+		int32_t		id;
+	} V8_PropertyCallbackInfo;
+
+	typedef struct {
+    void*        engine;
+    void*        info;
+    void*        setValue;
+    const char*  key;
+    int          key_length;
+    void*        data;
+    void*        callback;
+    void*        returnValue;
+		int32_t 	contextId;
+		int32_t		id;
+} V8_AccessorCallbackInfo;
+
+	typedef struct{
+	  void*   engine;
+	  void*   host;
+	  void*   key;
+	  uint32_t  index;
+	  void*   data;
+	  void*   callback;
+		int32_t 	contextId;
+		int32_t		id;
+	} V8_AccessCheckCallbackInfo;
+
+	typedef struct jsvalue
+	{
         // 8 bytes is the maximum CLR alignment; by putting the union first and a
         // int64_t inside it we make (almost) sure the offset of 'type' will always
         // be 8 and the total size 16. We add a check to JsContext_new anyway.
@@ -124,33 +181,35 @@ extern "C" {
 	} jserror;
 
 	EXPORT void CALLINGCONVENTION jsvalue_dispose(jsvalue value);
-
-
 	 // We don't have a keepalive_add_f because that is managed on the managed side.
     // Its definition would be "int (*keepalive_add_f) (ManagedRef obj)".
 
-  typedef void (CALLINGCONVENTION *keepalive_remove_f) (int context, int id);
-  typedef jsvalue (CALLINGCONVENTION *keepalive_get_property_value_f) (int context, int id, const char* name);
-  typedef jsvalue (CALLINGCONVENTION *keepalive_set_property_value_f) (int context, int id, const char* name, jsvalue value);
-  typedef jsvalue (CALLINGCONVENTION *keepalive_valueof_f) (int context, int id);
-	typedef jsvalue (CALLINGCONVENTION *keepalive_invoke_f) (int context, int id, jsvalue args);
-	typedef jsvalue (CALLINGCONVENTION *keepalive_delete_property_f) (int context, int id, const char* name);
-	typedef jsvalue (CALLINGCONVENTION *keepalive_enumerate_properties_f) (int context, int id);
+	typedef void (CALLINGCONVENTION *keepalive_remove_f) (void* engine, int context, int id);
+  typedef jsvalue (CALLINGCONVENTION *keepalive_get_property_value_f) (void* engine, int context, int id, const char* name);
+  typedef jsvalue (CALLINGCONVENTION *keepalive_set_property_value_f) (void* engine, int context, int id, const char* name, jsvalue value);
+  typedef jsvalue (CALLINGCONVENTION *keepalive_valueof_f) (void* engine,int context, int id);
+	typedef jsvalue (CALLINGCONVENTION *keepalive_invoke_f) (void* engine,int context, int id, jsvalue args);
+	typedef jsvalue (CALLINGCONVENTION *keepalive_delete_property_f) (void* engine,int context, int id, const char* name);
+	typedef jsvalue (CALLINGCONVENTION *keepalive_enumerate_properties_f) (void* engine,int context, int id);
 
 	EXPORT void* CALLINGCONVENTION V8_NewEngine(
 		int32_t max_young_space,
 		int32_t max_old_space
 	);
 
+	EXPORT void CALLINGCONVENTION V8_Go_Engine(void* engine, void* prt);
+
 	EXPORT void CALLINGCONVENTION V8_Engine_TerminateExecution(void* engine);
 
-	EXPORT void CALLINGCONVENTION V8_Engine_DumpHeapStats(void* engine);
+	//EXPORT void CALLINGCONVENTION V8_Engine_DumpHeapStats(void* engine);
 
 	EXPORT void CALLINGCONVENTION V8_Engine_DumpAllocatedItems();
 
 	EXPORT void CALLINGCONVENTION V8_Engine_Dispose(void* engine);
 
-	EXPORT void CALLINGCONVENTION V8_Engine_DisposeObject(void* engine, jsvalue obj);
+	//EXPORT void CALLINGCONVENTION V8_Engine_DisposeObject(void* engine, jsvalue obj);
+
+	EXPORT void CALLINGCONVENTION V8_Engine_DisposeValue(void* value);
 
   //EXPORT void* CALLINGCONVENTION V8_Engine_Compile(void* engine, const char* code, int length, void* goscriptorigin) ;
 
@@ -224,9 +283,9 @@ extern "C" {
 
   EXPORT void* CALLINGCONVENTION V8_NewRegExp(void* engine, const char* pattern, int length, int flags);
 
-  EXPORT int32_t CALLINGCONVENTION V8_Value_GetManageId(void* value);
+  EXPORT int CALLINGCONVENTION V8_Value_GetManageId(void* value);
 
-  EXPORT void CALLINGCONVENTION V8_Value_SetManageId(void* value, int32_t id);
+  EXPORT void CALLINGCONVENTION V8_Value_SetManageId(void* value, int id);
 
   EXPORT int CALLINGCONVENTION V8_Value_IsUndefined(void* value);
 
@@ -324,6 +383,12 @@ extern "C" {
 
   EXPORT int CALLINGCONVENTION V8_Object_HasRealNamedProperty(void* value, const char* key, int keylength);
 
+	EXPORT void CALLINGCONVENTION V8_Object_SetAlignedPointerInInternalField(void* value, int index, void* ptr);
+
+	EXPORT void* CALLINGCONVENTION V8_Object_GetAlignedPointerFromInternalField(void* value, int index);
+
+	EXPORT int CALLINGCONVENTION V8_Object_GetPropertyAttributes(void* value, const char* key, int keylength);
+
   EXPORT char* CALLINGCONVENTION V8_RegExp_Pattern(void* value);
 
   EXPORT int CALLINGCONVENTION V8_RegExp_Flags(void* value);
@@ -337,6 +402,12 @@ extern "C" {
   EXPORT void CALLINGCONVENTION V8_ObjectTemplate_SetProperty(void* otmp, const char* key, int keylength, void* propvalue, int attribs);
 
   EXPORT void CALLINGCONVENTION V8_ObjectTemplate_SetInternalFieldCount(void* otmp, int count);
+
+	EXPORT void CALLINGCONVENTION V8_ObjectTemplate_SetNamedPropertyHandler(void* otmp, void* getter,	void* setter,	void* query,	void* deleter,	void* enumerator,	void* data);
+
+	EXPORT void CALLINGCONVENTION  V8_ObjectTemplate_SetIndexedPropertyHandler(void* otmp, void* getter,	void* setter,	void* query,	void* deleter,	void* enumerator,	void* data);
+
+	EXPORT void CALLINGCONVENTION  V8_ObjectTemplate_SetAccessor(void *otmp, const char* key, int keylength, void* getter, void* setter, void* data, int attribs) ;
 
   EXPORT void  CALLINGCONVENTION V8_ObjectTemplate_Dispose(void* otmp);
 

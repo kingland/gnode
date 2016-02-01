@@ -32,35 +32,53 @@ import "reflect"
 
 type Engine struct {
   embedable
-  self unsafe.Pointer
-  disposed bool
+  self                    unsafe.Pointer
+  disposed                bool
 
   //TODO: static value
-  undefinedValue *Value
-  nullValue *Value
-  trueValue *Value
-  falseValue *Value
+  undefinedValue          *Value
+  nullValue               *Value
+  trueValue               *Value
+  falseValue              *Value
 
   //TODO: Context ID
-  contextId int
-  scriptId int
+  //contextId               int
+  //scriptId                int
+  //unboundScriptId         int
+  //valueId                 int
+
+  //TODO:
+  aliveContext            map[int]*Context
+  aliveScript             map[int]*Script
+  aliveUnboundScript      map[int] *UnboundScript
+  aliveValue              map[int32]*Value
 }
 
-var traceDispose = true
-var aliveContext map[int]*Context = make(map[int]*Context)
+var (
+  traceDispose bool = true
+  contextId int = 0
+  scriptId int = 0
+  unboundScriptId int = 0
+  valueId int32 = 0
+)
 
 //create engine
 func NewEngine() *Engine {
   self_ := C.V8_NewEngine(-1,-1)
-
-  engine := &Engine{
+  engine_ := &Engine{
     self : self_,
     disposed : false,
-    //mapContext : make(map[int32]*Context),
-    contextId : 0,
+    aliveContext : make(map[int]*Context),
+    aliveScript : make(map[int]*Script),
+    aliveUnboundScript : make(map[int] *UnboundScript),
+    aliveValue : make(map[int32]*Value),
+    //contextId : 0,
+    //scriptId : 0,
+    //unboundScriptId : 0,
+    //valueId : 0,
   }
-
-  runtime.SetFinalizer(engine, func(e *Engine) {
+  engine_.SetOwner()
+  runtime.SetFinalizer(engine_, func(e *Engine) {
     if traceDispose {
       println("V8_Engine_Dispose()", e.self)
     }
@@ -68,17 +86,11 @@ func NewEngine() *Engine {
       C.V8_Engine_Dispose(e.self)
     }
   })
-  return engine
+  return engine_
 }
 
-//map context id
-func (engine_ *Engine) GetAliveContext(id int) *Context{
-  return aliveContext[id]
-}
-
-//map context id
-func (engine_ *Engine) SetAliveContext(id int, context *Context){
-  aliveContext[id] = context
+func (engine_ *Engine) SetOwner() {
+  C.V8_Go_Engine(engine_.self, unsafe.Pointer(engine_))
 }
 
 func (engine_ *Engine) IsDisposed() bool{
@@ -98,6 +110,19 @@ func (engine_ *Engine) Disposed(forceAll bool) {
 		foreach (var aliveScript in _aliveScripts) {
       JsScript.jsscript_dispose(aliveScript.Value.Handle);
 		}*/
+
+    /*for _ , ctx_ := range engine_.aliveContext {
+      ctx_.Disposed()
+    }
+    for _, scp_ := range engine_.aliveScript {
+      scp_.Disposed()
+    }
+    for _, uscp_ := range engine_.aliveUnboundScript {
+      uscp_.Disposed()
+    }
+    for _, val_ := range engine_.aliveValue {
+      val_.Disposed();
+    }*/
   }
 
   if !engine_.disposed {
@@ -117,20 +142,20 @@ func (engine_ *Engine) TerminateExecution()  {
   C.V8_Engine_TerminateExecution(engine_.self)
 }
 
+/*
+TODO:
 func (engine_ *Engine) DumpHeapStats()  {
   C.V8_Engine_DumpHeapStats(engine_.self)
 }
 
+//TODO: DumpAllocatedItems
 func (engine_ *Engine) DumpAllocatedItems()  {
-  //TODO:
 }
+*/
 
-func (engine_ *Engine) DisposeObject(){
-  //TODO:
-  if engine_.IsDisposed() {
-    //C.V8_Engine_DisposeObject(engine.self,)
-  } else {
-    //C.V8_Engine_DisposeObject(engine.self,)
+func (engine_ *Engine) DisposeValue(val *Value){
+  if !val.IsDisposed() {
+    val.Disposed();
   }
 }
 
@@ -149,67 +174,111 @@ func go_panic(message *C.char) {
 	panic(C.GoString(message))
 }
 
+//export go_keepalive_value_remove
+func go_keepalive_value_remove(engine unsafe.Pointer, context, id int) {
+  /*engine_ := (*Engine)(engine)
+  context_ := engine_.aliveContext[context]
+  if context_ != nil {
+    engine_ := context_.GetEngine()
+    val_ := engine_.GetAliveValue(id)
+    val_.Disposed()
+  }*/
+}
+
+//export go_keepalive_object_remove
+func go_keepalive_object_remove(engine unsafe.Pointer, context, id int){
+  /*engine_ := (*Engine)(engine)
+  context_ := engine_.aliveContext[context]
+  if context_ != nil {
+    engine_ := context_.GetEngine()
+    val_ := engine_.GetAliveValue(id)
+    val_.Disposed()
+  }*/
+}
+
+//export go_keepalive_function_remove
+func go_keepalive_function_remove(engine unsafe.Pointer, context, id int){
+  /*engine_ := (*Engine)(engine)
+  context_ := engine_.aliveContext[context]
+  if context_ != nil {
+    engine_ := context_.GetEngine()
+    val_ := engine_.GetAliveValue(id)
+    val_.Disposed()
+  }*/
+}
+
 //export go_keepalive_remove
-func go_keepalive_remove(context, id int){
+func go_keepalive_remove(engine unsafe.Pointer, context, id int){
   //TODO:
+  /*engine_ := (*Engine)(engine)
+  context_ := engine_.aliveContext[context]
+  if context_ == nil {
+    panic("fail")
+  }*/
 }
 
 //export go_keepalive_get_property_value
-func go_keepalive_get_property_value(context int, id int, name *C.char){
+func go_keepalive_get_property_value(engine unsafe.Pointer, context int, id int, name *C.char){
   //TODO: return  unsafe.Pointer
-  context_ := aliveContext[context]
+  /*engine_ := (*Engine)(engine)
+  context_ := engine_.aliveContext[context]
   if context_ == nil {
     panic("fail")
-  }
-  context_.keepAliveGetPropertyValue(id, C.GoString(name))
+  }*/
+  //context_.keepAliveGetPropertyValue(id, C.GoString(name))
 }
 
 //export go_keepalive_set_property_value
-func go_keepalive_set_property_value(context int, id int, name *C.char, value *C.jsvalue) {
+func go_keepalive_set_property_value(engine unsafe.Pointer, context int, id int, name *C.char, value *C.jsvalue) {
   //TODO: return unsafe.Pointer
-  context_ := aliveContext[context]
+  /*engine_ := (*Engine)(engine)
+  context_ := engine_.aliveContext[context]
   if context_ == nil {
     panic("fail")
-  }
-  context_.keepAliveSetPropertyValue(id, C.GoString(name), value)
+  }*/
+  //context_.keepAliveSetPropertyValue(id, C.GoString(name), value)
 }
 
 //export go_keepalive_valueof
-func go_keepalive_valueof(context, id int) {
+func go_keepalive_valueof(engine unsafe.Pointer, context, id int) {
   //TODO: return unsafe.Pointer
-  context_ := aliveContext[context]
+  /*engine_ := (*Engine)(engine)
+  context_ := engine_.aliveContext[context]
   if context_ == nil {
     panic("fail")
-  }
-  context_.keepAliveValueOf(id)
+  }*/
+  //context_.keepAliveValueOf(id)
 }
 
 //export go_keepalive_invoke
-func go_keepalive_invoke(context int, id int, args *C.jsvalue) {
+func go_keepalive_invoke(engine unsafe.Pointer, context int, id int, args *C.jsvalue) {
   //TODO: return unsafe.Pointer
-  context_ := aliveContext[context]
+  /*engine_ := (*Engine)(engine)
+  context_ := engine_.aliveContext[context]
   if context_ == nil {
     panic("fail")
-  }
-  context_.keepAliveInvoke(id, args)
+  }*/
+  //context_.keepAliveInvoke(id, args)
 }
 
 //export go_keepalive_delete_property
-func go_keepalive_delete_property(context int, id int, name *C.char) {
+func go_keepalive_delete_property(engine unsafe.Pointer, context int, id int, name *C.char) {
   //TODO: return unsafe.Pointer
-  context_ := aliveContext[context]
+  /*engine_ := (*Engine)(engine)
+  context_ := engine_.aliveContext[context]
   if context_ == nil {
     panic("fail")
-  }
-  context_.keepAliveDeleteProperty(id, C.GoString(name))
+  }*/
+  //context_.keepAliveDeleteProperty(id, C.GoString(name))
 }
 
 //export go_keepalive_enumerate_properties
-func go_keepalive_enumerate_properties(context int, id int) {
+func go_keepalive_enumerate_properties(engine unsafe.Pointer, context int, id int) {
   //TODO: retru nunsafe.Pointer
-  context_ := aliveContext[context]
+  /*engine_ := (*Engine)(engine)
+  context_ := engine_.aliveContext[context]
   if context_ == nil {
     panic("fail")
-  }
-  context_.keepAliveEnumerateProperties(id)
+  }*/
+  //context_.keepAliveEnumerateProperties(id)
 }

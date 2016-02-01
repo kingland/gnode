@@ -27,45 +27,45 @@
 //#include "bridge.h"
 #include "_cgo_export.h"
 extern "C" {
-	void keepalive_remove (int context, int id) {
-		go_keepalive_remove(context,id);
+	void keepalive_remove (void* engine, int context, int id) {
+		go_keepalive_remove(engine, context, id);
 	}
 
-	jsvalue keepalive_get_property_value (int context, int id, const char* name){
+	jsvalue keepalive_get_property_value (void* engine, int context, int id, const char* name){
 		char * cname = strdup(name);
-		go_keepalive_get_property_value(context, id, cname);
+		go_keepalive_get_property_value(engine, context, id, cname);
 		jsvalue v;
 		return v;
 	}
 
-	jsvalue keepalive_set_property_value (int context, int id, const char* name, jsvalue value){
+	jsvalue keepalive_set_property_value (void* engine, int context, int id, const char* name, jsvalue value){
 		char * cname = strdup(name);
-		go_keepalive_set_property_value(context, id, cname, &value);
+		go_keepalive_set_property_value(engine, context, id, cname, &value);
 		jsvalue v;
 		return v;
 	}
 
-	jsvalue keepalive_valueof(int context, int id){
-		go_keepalive_valueof(context, id);
+	jsvalue keepalive_valueof(void* engine, int context, int id){
+		go_keepalive_valueof(engine, context, id);
 		jsvalue v;
 		return v;
 	}
 
-	jsvalue keepalive_invoke(int context, int id, jsvalue args){
-		go_keepalive_invoke(context, id, &args);
+	jsvalue keepalive_invoke(void* engine, int context, int id, jsvalue args){
+		go_keepalive_invoke(engine, context, id, &args);
 		jsvalue v;
 		return v;
 	}
 
-	jsvalue keepalive_delete_property (int context, int id, const char* name){
+	jsvalue keepalive_delete_property (void* engine, int context, int id, const char* name){
 		char * cname = strdup(name);
-		go_keepalive_delete_property(context, id, cname);
+		go_keepalive_delete_property(engine, context, id, cname);
 		jsvalue v;
 		return v;
 	}
 
-	jsvalue keepalive_enumerate_properties(int context, int id){
-		go_keepalive_enumerate_properties(context, id);
+	jsvalue keepalive_enumerate_properties(void* engine,int context, int id){
+		go_keepalive_enumerate_properties(engine, context, id);
 		jsvalue v;
 		return v;
 	}
@@ -82,17 +82,11 @@ extern "C" {
 			engine->SetEnumeratePropertiesDelegate(keepalive_enumerate_properties);
     }
 		return (void*) engine;
+	}
 
-		/*return (void*) jsengine_new(
-			keepalive_remove,
-			keepalive_get_property_value,
-			keepalive_set_property_value,
-			keepalive_valueof,
-			keepalive_invoke,
-			keepalive_delete_property,
-			keepalive_enumerate_properties,
-			max_young_space,
-			max_old_space);*/
+	EXPORT void CALLINGCONVENTION V8_Go_Engine(void* engine, void* prt){
+		JsEngine *jsengine = static_cast<JsEngine*>(engine);
+		jsengine->SetGoEngine(prt);
 	}
 
 	EXPORT void CALLINGCONVENTION V8_Engine_TerminateExecution(void* engine){
@@ -107,13 +101,13 @@ extern "C" {
 		jsengine->DumpHeapStats();
 	}
 
-	EXPORT void CALLINGCONVENTION V8_Engine_DumpAllocatedItems(){
+	//EXPORT void CALLINGCONVENTION V8_Engine_DumpAllocatedItems(){
 		//js_dump_allocated_items();
 		//std::wcout << "Total allocated Js engines " << js_mem_debug_engine_count << std::endl;
 		//std::wcout << "Total allocated Js contexts " << js_mem_debug_context_count << std::endl;
 		//std::wcout << "Total allocated Js scripts " << js_mem_debug_script_count << std::endl;
 		//std::wcout << "Total allocated Managed Refs " << js_mem_debug_managedref_count << std::endl;
-	}
+	//}
 
 	EXPORT void CALLINGCONVENTION V8_Engine_Dispose(void* engine){
 		JsEngine *jsengine = static_cast<JsEngine*>(engine);
@@ -121,7 +115,7 @@ extern "C" {
     delete jsengine;
 	}
 
-	EXPORT void CALLINGCONVENTION V8_Engine_DisposeObject(void* engine, jsvalue obj){
+	/*EXPORT void CALLINGCONVENTION V8_Engine_DisposeObject(void* engine, jsvalue obj){
 		JsEngine *jsengine = static_cast<JsEngine*>(engine);
 		if(obj.type != JSVALUE_TYPE_PERSISTENT){
 			return;
@@ -134,6 +128,11 @@ extern "C" {
     	//jsengine->DisposeObject(jsobj->value_);
 		}
 		delete jsobj;
+	}*/
+
+	EXPORT void CALLINGCONVENTION V8_Engine_DisposeValue(void* value){
+		JsValue *jsvalue = static_cast<JsValue*>(value);
+		delete jsvalue;
 	}
 
 	EXPORT void* CALLINGCONVENTION V8_NewContext(int32_t id, void* engine){
@@ -528,11 +527,20 @@ extern "C" {
 	EXPORT void* CALLINGCONVENTION V8_NewObject(void* engine){
 		JsEngine *jsengine = static_cast<JsEngine*>(engine);
 		Isolate *isolate_ = jsengine->GetIsolate();
-
+		std::wcout << "V8_NewObject 1::"  << std::endl;
 		HANDLE_SCOPE(isolate_);
-		Local<Object> val = Object::New(isolate_);
-		JsObject* jso = new JsObject(jsengine, val);
-		return (void*) jso;
+		//Local<Context> local_context = Context::New(isolate_, NULL, jsengine->GetGlobalContext()->context_);
+		Local<Context> local_context = Local<Context>::New(isolate_, jsengine->GetGlobalContext()->context_);
+		Context::Scope context_scope(local_context);
+		std::wcout << "V8_NewObject 2::"  << std::endl;
+		Local<Object> local_val = Object::New(isolate_);
+		//TODO:: manage object
+		//Local<Object> val =
+		std::wcout << "V8_NewObject 3::"  << std::endl;
+		//JsObject* jso = JsObject::New(jsengine, val);
+		JsValue* jsval = JsValue::New(jsengine, local_val);
+		std::wcout << "V8_NewObject 4::"  << std::endl;
+		return (void*) jsval;
 	}
 
 	EXPORT void* CALLINGCONVENTION V8_NewArray(void* engine, int length){
@@ -568,12 +576,12 @@ extern "C" {
 		return (void*) jsv;
 	}
 
-	EXPORT int32_t CALLINGCONVENTION V8_Value_GetManageId(void* value){
+	EXPORT int CALLINGCONVENTION V8_Value_GetManageId(void* value){
 		JsValue *jsvalue = static_cast<JsValue*>(value);
 		return jsvalue->GetManageId();
 	}
 
-	EXPORT void CALLINGCONVENTION V8_Value_SetManageId(void* value, int32_t id){
+	EXPORT void CALLINGCONVENTION V8_Value_SetManageId(void* value, int id){
 		JsValue *jsvalue = static_cast<JsValue*>(value);
 		jsvalue->SetManageId(id);
 	}
@@ -997,6 +1005,17 @@ extern "C" {
 		return Local<Object>::Cast(local_value)->SetPrototype(local_proto);
 	}
 
+	EXPORT int CALLINGCONVENTION V8_Object_GetPropertyAttributes(void* value, const char* key, int keylength) {
+		JsValue *jsvalue = static_cast<JsValue*>(value);
+		Isolate *isolate_ = jsvalue->GetIsolate();
+		//VALUE_SCOPE(value);
+		HANDLE_SCOPE(isolate_);
+		Local<Value> local_value = Local<Value>::New(isolate_, jsvalue->value_);
+		return Local<Object>::Cast(local_value)->GetPropertyAttributes(
+			String::NewFromUtf8(isolate_, key, String::kInternalizedString, keylength)
+		);
+	}
+
 	EXPORT int CALLINGCONVENTION V8_Object_SetHiddenValue(void* value, const char* key, int keylength ,void* hidvalue){
 		JsValue *jsvalue = static_cast<JsValue*>(value);
 		JsValue *jshidvalue = static_cast<JsValue*>(hidvalue);
@@ -1075,6 +1094,28 @@ extern "C" {
 		return Local<Object>::Cast(local_value)->HasRealNamedProperty(
 			String::NewFromUtf8(isolate_, key, String::kInternalizedString, keylength)
 		);
+	}
+
+	EXPORT void CALLINGCONVENTION V8_Object_SetAlignedPointerInInternalField(void* value, int index, void* ptr){
+			JsValue *jsvalue = static_cast<JsValue*>(value);
+			Isolate *isolate_ = jsvalue->GetIsolate();
+			//VALUE_SCOPE(value);
+			//Local<Object> obj = Local<Object>::Cast(local_value);
+			//obj->SetAlignedPointerInInternalField(index, value_ptr);
+			HANDLE_SCOPE(isolate_);
+			Local<Value> local_value = Local<Value>::New(isolate_, jsvalue->value_);
+			Local<Object>::Cast(local_value)->SetAlignedPointerInInternalField(index, ptr);
+	}
+
+	EXPORT void* CALLINGCONVENTION V8_Object_GetAlignedPointerFromInternalField(void* value, int index) {
+		JsValue *jsvalue = static_cast<JsValue*>(value);
+		Isolate *isolate_ = jsvalue->GetIsolate();
+		//VALUE_SCOPE(value);
+		//Local<Object> obj = Local<Object>::Cast(local_value);
+		//return obj->GetAlignedPointerFromInternalField(index);
+		HANDLE_SCOPE(isolate_);
+		Local<Value> local_value = Local<Value>::New(isolate_, jsvalue->value_);
+		return Local<Object>::Cast(local_value)->GetAlignedPointerFromInternalField(index);
 	}
 
 	EXPORT char* CALLINGCONVENTION V8_RegExp_Pattern(void* value){
@@ -1204,9 +1245,112 @@ extern "C" {
 		//local_template->SetInternalFieldCount(count);
 	}
 
+	EXPORT void CALLINGCONVENTION V8_ObjectTemplate_SetNamedPropertyHandler(
+		void* otmp,
+		void* getter,
+		void* setter,
+		void* query,
+		void* deleter,
+		void* enumerator,
+		void* data
+){
+		JsObjectTemplate *jsobjecttemplate = static_cast<JsObjectTemplate*>(otmp);
+		Isolate *isolate_ = jsobjecttemplate->isolate_;
+
+		HANDLE_SCOPE(isolate_);
+		Local<ObjectTemplate> local_template = Local<ObjectTemplate>::New(isolate_, jsobjecttemplate->value_);
+
+		Handle<Array> callbackData_ = Array::New(isolate_, OTP_Num);
+		callbackData_->Set(OTP_Context, External::New(isolate_, (void*)jsobjecttemplate->engine_));
+		callbackData_->Set(OTP_Getter, External::New(isolate_, getter));
+		callbackData_->Set(OTP_Setter, External::New(isolate_, setter));
+		callbackData_->Set(OTP_Query, External::New(isolate_, query));
+		callbackData_->Set(OTP_Deleter, External::New(isolate_, deleter));
+		callbackData_->Set(OTP_Enumerator, External::New(isolate_, enumerator));
+		callbackData_->Set(OTP_Data, External::New(isolate_, data));
+
+		local_template->SetNamedPropertyHandler(
+			ManageNamePropertyGetCallback,
+			setter == NULL ? NULL : ManageNamePropertySetCallback,
+			query == NULL ? NULL : ManageNamePropertyQueryCallback,
+			deleter == NULL ? NULL : ManageNamePropertyDeleteCallback,
+			enumerator == NULL ? NULL : ManageNamePropertyEnumerateCallback,
+			callbackData_
+		);
+	}
+
+	EXPORT void CALLINGCONVENTION  V8_ObjectTemplate_SetIndexedPropertyHandler(
+		void* otmp,
+		void* getter,
+		void* setter,
+		void* query,
+		void* deleter,
+		void* enumerator,
+		void* data
+	){
+		JsObjectTemplate *jsobjecttemplate = static_cast<JsObjectTemplate*>(otmp);
+		Isolate *isolate_ = jsobjecttemplate->isolate_;
+
+		HANDLE_SCOPE(isolate_);
+		Local<ObjectTemplate> local_template = Local<ObjectTemplate>::New(isolate_, jsobjecttemplate->value_);
+
+		Handle<Array> callbackData_ = Array::New(isolate_, OTP_Num);
+		callbackData_->Set(OTP_Context, External::New(isolate_, (void*)jsobjecttemplate->engine_));
+		callbackData_->Set(OTP_Getter, External::New(isolate_, getter));
+		callbackData_->Set(OTP_Setter, External::New(isolate_, setter));
+		callbackData_->Set(OTP_Query, External::New(isolate_, query));
+		callbackData_->Set(OTP_Deleter, External::New(isolate_, deleter));
+		callbackData_->Set(OTP_Enumerator, External::New(isolate_, enumerator));
+		callbackData_->Set(OTP_Data, External::New(isolate_, data));
+
+		local_template->SetIndexedPropertyHandler(
+			ManageIndexPropertyGetCallback,
+			setter == NULL ? NULL : ManageIndexPropertySetCallback,
+			query == NULL ? NULL : ManageIndexPropertyQueryCallback,
+			deleter == NULL ? NULL : ManageIndexPropertyDeleteCallback,
+			enumerator == NULL ? NULL : ManageIndexPropertyEnumCallback,
+	 		callbackData_
+		);
+	}
+
+	EXPORT void CALLINGCONVENTION  V8_ObjectTemplate_SetAccessor(
+		void *otmp,
+		const char* key,
+		int keylength,
+		void* getter,
+		void* setter,
+		void* data,
+		int attribs
+	) {
+		JsObjectTemplate *jsobjecttemplate = static_cast<JsObjectTemplate*>(otmp);
+		Isolate *isolate_ = jsobjecttemplate->isolate_;
+
+		HANDLE_SCOPE(isolate_);
+		Local<ObjectTemplate> local_template = Local<ObjectTemplate>::New(isolate_, jsobjecttemplate->value_);
+
+		Handle<Array> callbackData_ = Array::New(isolate_, 5);
+		callbackData_->Set(OTA_Context, External::New(isolate_, (void*)jsobjecttemplate->engine_));
+		callbackData_->Set(OTA_Getter, External::New(isolate_, getter));
+		callbackData_->Set(OTA_Setter, External::New(isolate_, setter));
+		callbackData_->Set(OTA_KeyString, External::New(isolate_, (void*)key));
+		callbackData_->Set(OTA_KeyLength, Integer::New(isolate_, keylength));
+		callbackData_->Set(OTA_Data, External::New(isolate_, data));
+
+		if (callbackData_.IsEmpty())
+			return;
+
+		local_template->SetAccessor(
+			String::NewFromUtf8(isolate_, key, String::kInternalizedString, keylength),
+			ManageAccessorGetterCallback,
+			setter == NULL ? NULL : ManageAccessorSetterCallback,
+	 		callbackData_
+		);
+	}
+
 	EXPORT void  CALLINGCONVENTION V8_ObjectTemplate_Dispose(void* otmp) {
 		delete static_cast<JsObjectTemplate*>(otmp);
 	}
+
 	/*EXPORT void* CALLINGCONVENTION V8_Engine_Compile(void* engine, const char* code, int length, void* goscriptorigin) {
 		JsEngine *jsengine = static_cast<JsEngine*>(engine);
 		Isolate *isolate_ = jsengine->GetIsolate();
